@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 use std::process::exit;
-use crate::ExecuteResult::{ExecuteSuccess, ExecuteTableFull};
+use crate::ExecuteResult::{ExecuteFailed, ExecuteSuccess, ExecuteTableFull};
 
 use crate::MetaCommandResult::{MetaCommandSuccess, MetaCommandUnrecognized};
 use crate::PreparedStatementResult::{PreparedStatementSuccess, PreparedStatementSyntaxError, PreparedStatementUnrecognized};
@@ -44,7 +44,7 @@ static TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 
 
 fn main() {
-    let table: Table = Table::new();
+    let mut table: Table = Table::new();
     let mut input_buffer: InputBuffer = InputBuffer::new();
 
     loop {
@@ -76,8 +76,12 @@ fn main() {
             }
         }
 
-        execute_prepared_statement(statement);
-        println!("Executed!");
+        let exec_result: ExecuteResult = execute_prepared_statement(statement, &mut table);
+        match exec_result {
+            ExecuteSuccess => {println!("Execution Success!")}
+            ExecuteFailed => {println!("Execution Failed!")}
+            ExecuteTableFull => {println!("Table is full!")}
+        }
     }
 }
 
@@ -112,6 +116,10 @@ fn do_prepared_statements(input: &str, statement: &mut PreparedStatement) -> Pre
         }
 
         statement.row.id = split_info.get(1).unwrap().parse::<u32>().unwrap_or(0);
+        if statement.row.id == 0 {
+            return PreparedStatementSyntaxError
+        }
+
         statement.row.username = split_info.get(2).unwrap().parse().unwrap();
         statement.row.email = split_info.get(3).unwrap().parse().unwrap();
     } else {
@@ -121,43 +129,70 @@ fn do_prepared_statements(input: &str, statement: &mut PreparedStatement) -> Pre
     PreparedStatementSuccess
 }
 
-fn execute_prepared_statement(statement: PreparedStatement) {
+fn execute_prepared_statement(statement: PreparedStatement, table: &mut Table) -> ExecuteResult {
+    let mut exec_result: ExecuteResult = ExecuteFailed;
     match statement.statement_type {
         Invalid => {}
         StatementType::Insert => {
-            println!("This is where we would do an insert.")
+            exec_result = execute_insert(statement, table);
         }
         StatementType::Select => {
-            println!("This is where we would do a select.")
+            exec_result = execute_select(statement, table);
         }
     }
+
+    exec_result
 }
 
-fn set_row_slot(table: Table, row: SimpleRow, row_num: usize) {
-    let page_num: usize = row_num / ROWS_PER_PAGE;
+fn set_row_slot(table: &mut Table, row: SimpleRow, _row_num: usize) -> bool {
+    // let page_num: usize = row_num / ROWS_PER_PAGE;
+    // let row_slot = row_num % ROWS_PER_PAGE;
 
-    table.pages[page_num]; // void* page =
-    // if page is null
-    // page = table->pages[page_num] = malloc(PAGE_SIZE);
-    let row_offset: usize = row_num % ROWS_PER_PAGE;
-    let byte_offset: usize = row_offset * ROW_SIZE;
-    // return page + byte_offset;
+    /*if table.rows.len() < row_num {
+        println!("nah");
+        return false
+    } else if table.rows.len() == row_num {
+        println!("push");
+        table.rows.push(row);
+    } else {
+        println!("set");
+        table.rows[row_num] = row;
+    }
+     */
+
+    table.rows.push(row);
+
+    true
 }
 
-fn set_row_slot(table: crate::Table, row: crate::SimpleRow) {
-    set_row_slot(table, row, table.num_rows + 1);
+fn append_row_slot(table: &mut Table, row: SimpleRow) -> bool {
+    return set_row_slot(table, row, &table.num_rows + 1);
 }
 
-fn execute_insert(statement: PreparedStatement, mut table: Table) -> ExecuteResult {
+fn execute_insert(statement: PreparedStatement, table: &mut Table) -> ExecuteResult {
     if table.num_rows >= TABLE_MAX_ROWS {
-        return ExecuteTableFull;
+        return ExecuteTableFull
     }
 
     let to_insert: SimpleRow = statement.row;
-    set_row_slot(table, to_insert, table.num_rows);
+    if set_row_slot(table, to_insert, table.num_rows) {
+        return ExecuteSuccess
+    }
 
     table.num_rows += 1;
+    ExecuteFailed
+}
+
+fn execute_select(_statement: PreparedStatement, table: &mut Table) -> ExecuteResult {
+    for i in &table.rows {
+        print_row(i);
+    }
+
     ExecuteSuccess
+}
+
+fn print_row(row: &SimpleRow) {
+    println!("({id}, {username}, {email})", id=row.id, username=row.username, email=row.email)
 }
 
 fn print_prompt() {
@@ -199,7 +234,16 @@ impl PreparedStatement {
 
 struct Table {
     num_rows: usize,
-    pages: [[SimpleRow; PAGE_SIZE]; TABLE_MAX_PAGES]
+    rows: Vec<SimpleRow>,
+}
+
+impl Table {
+    pub fn new() -> Table {
+        Table {
+            num_rows: 0,
+            rows: Vec::with_capacity(TABLE_MAX_PAGES * PAGE_SIZE),
+        }
+    }
 }
 
 struct InputBuffer {
@@ -227,5 +271,6 @@ enum PreparedStatementResult {
 
 enum ExecuteResult {
     ExecuteSuccess,
+    ExecuteFailed,
     ExecuteTableFull
 }
