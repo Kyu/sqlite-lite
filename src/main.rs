@@ -56,7 +56,9 @@ fn main() {
 
         if input.starts_with(".") {
             match do_meta_command(input) {
-                MetaCommandSuccess => {}
+                MetaCommandSuccess => {
+                    continue;
+                }
                 MetaCommandUnrecognized => {
                     println!("Unrecognized command {:?}", input);
                     continue;
@@ -78,7 +80,9 @@ fn main() {
 
         let exec_result: ExecuteResult = execute_prepared_statement(statement, &mut table);
         match exec_result {
-            ExecuteSuccess => {println!("Execution Success!")}
+            ExecuteSuccess => {
+                println!("Execution Success!");
+            }
             ExecuteFailed => {println!("Execution Failed!")}
             ExecuteTableFull => {println!("Table is full!")}
         }
@@ -95,6 +99,7 @@ fn read_input(input_buffer: &mut InputBuffer) {
 fn do_meta_command(command: &str) -> MetaCommandResult{
     match command {
         ".exit" => {
+            println!("Goodbye!");
             exit(0);
         },
         ".test" => println!("Test worked!"),
@@ -161,6 +166,7 @@ fn set_row_slot(table: &mut Table, row: SimpleRow, _row_num: usize) -> bool {
      */
 
     table.rows.push(row);
+    table.num_rows += 1;
 
     true
 }
@@ -179,7 +185,6 @@ fn execute_insert(statement: PreparedStatement, table: &mut Table) -> ExecuteRes
         return ExecuteSuccess
     }
 
-    table.num_rows += 1;
     ExecuteFailed
 }
 

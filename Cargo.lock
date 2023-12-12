@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "sqlite-lite"
+name = "sqlite_lite"
 version = "0.0.1"

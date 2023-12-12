@@ -1,5 +1,5 @@
 [package]
-name = "sqlite-lite"
+name = "sqlite_lite"
 version = "0.0.1"
 edition = "2021"
 
