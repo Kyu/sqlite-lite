@@ -33,7 +33,7 @@ static TABLE_MAX_ROWS: usize = ROWS_PER_PAGE * TABLE_MAX_PAGES;
 fn main() -> io::Result<()>{
     let args: Vec<String> = env::args().collect();
 
-    if args.len() <= 0 {
+    if args.len() <= 1 {
         let exc_path: String;
         if args.len() != 0 {
             exc_path = args[0].to_string();
