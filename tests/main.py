@@ -30,14 +30,19 @@ def run_executable(inputs: list[str]):
 
     for cmd in inputs:
         c.sendline(cmd)
-        final += c.read_nonblocking(50000)
 
+    final += c.read_nonblocking(50000000000)
     resp = final.split("\n")
 
     resp = [r.strip() for r in resp if r]
 
     return resp
 
+
+if __name__ == "__main__":
+    get_executable()
+    print(run_executable([".test", ".exit"]))
+    exit(0)
 
 with describe(SqliteLite) as it:
     @it.before
@@ -169,7 +174,3 @@ with describe(SqliteLite) as it:
         result2 = run_executable(input_list2)
         print(result2)
         test.assertCountEqual(expected2, result2)
-
-if __name__ == "__main__":
-    get_executable()
-    print(run_executable([".test", ".exit"]))

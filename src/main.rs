@@ -10,24 +10,6 @@ use crate::MetaCommandResult::{MetaCommandSuccess, MetaCommandUnrecognized};
 use crate::PreparedStatementResult::{PreparedStatementError, PreparedStatementSuccess, PreparedStatementSyntaxError, PreparedStatementUnrecognized};
 use crate::StatementType::Invalid;
 
-// https://stackoverflow.com/a/70222282/3875151
-macro_rules! size_of_attribute {
-    ($t:ident :: $field:ident) => {{
-        let m = core::mem::MaybeUninit::<$t>::uninit();
-        // According to https://doc.rust-lang.org/stable/std/ptr/macro.addr_of_mut.html#examples,
-        // you can dereference an uninitialized MaybeUninit pointer in addr_of!
-        // Raw pointer deref in const contexts is stabilized in 1.58:
-        // https://github.com/rust-lang/rust/pull/89551
-        let p = unsafe {
-            core::ptr::addr_of!((*(&m as *const _ as *const $t)).$field)
-        };
-
-        const fn size_of_raw<T>(_: *const T) -> usize {
-            core::mem::size_of::<T>()
-        }
-        size_of_raw(p)
-    }};
-}
 
 const  ID_SIZE: usize = 4;
 const  USERNAME_SIZE: usize = 32;
@@ -152,7 +134,7 @@ fn do_prepared_statements(input: &str, statement: &mut PreparedStatement) -> Pre
             return PreparedStatementSyntaxError
         }
 
-        statement.row.id = split_info.get(1).unwrap().parse::<u32>().unwrap_or(0);
+        statement.row.set_id(split_info.get(1).unwrap().parse::<u32>().unwrap_or(0));
         if statement.row.id == 0 {
             return PreparedStatementSyntaxError
         }
@@ -207,7 +189,7 @@ fn set_row_slot(table: &mut Table, row: SimpleRow, _row_num: usize) -> bool { //
     true
 }
 
-fn append_row_slot(table: &mut Table, row: SimpleRow) -> bool { // TODO make member function
+fn _append_row_slot(table: &mut Table, row: SimpleRow) -> bool { // TODO make member function
     return set_row_slot(table, row, &table.num_rows + 1);
 }
 
@@ -233,7 +215,7 @@ fn execute_select(_statement: PreparedStatement, table: &mut Table) -> ExecuteRe
 }
 
 fn print_row(row: &SimpleRow) { // TODO make member function
-    println!("({id}, {username}, {email})", id=row.id, username=row.get_username(), email=row.get_email())
+    println!("({id}, {username}, {email})", id=row.get_id(), username=row.get_username(), email=row.get_email())
 }
 
 fn print_prompt() {
@@ -304,6 +286,9 @@ impl SimpleRow {
     }
 
     fn get_username(&self) -> String {
+        // println!("{}", self.username_len);
+        // let s = String::from_iter(&self.username[0..self.username_len]);
+        // println!("{} {}", s, s.len());
         return String::from_iter(&self.username[0..self.username_len]);
     }
 
