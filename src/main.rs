@@ -1,15 +1,18 @@
 use std::{env, io};
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::FileExt;
-use std::path::Path;
+use std::io::{Write};
 use std::process::exit;
 
-use crate::ExecuteResult::{ExecuteFailed, ExecuteSuccess, ExecuteTableFull};
-use crate::MetaCommandResult::{MetaCommandSuccess, MetaCommandUnrecognized};
-use crate::PreparedStatementResult::{PreparedStatementError, PreparedStatementSuccess, PreparedStatementSyntaxError, PreparedStatementUnrecognized};
-use crate::StatementType::Invalid;
+use crate::b_tree::{SimpleRow, Table};
+use crate::state::{ProgramState};
+use crate::status::{ExecuteResult, MetaCommandResult, PreparedStatementResult, StatementType};
+use crate::status::ExecuteResult::{ExecuteFailed, ExecuteSuccess, ExecuteTableFull};
+use crate::status::MetaCommandResult::{MetaCommandSuccess, MetaCommandUnrecognized};
+use crate::status::PreparedStatementResult::{PreparedStatementError, PreparedStatementSuccess, PreparedStatementSyntaxError, PreparedStatementUnrecognized};
+use crate::status::StatementType::Invalid;
 
+mod b_tree;
+mod state;
+mod status;
 
 const  ID_SIZE: usize = 4;
 const  USERNAME_SIZE: usize = 32;
@@ -52,9 +55,9 @@ fn main() -> io::Result<()>{
 
     let mut program_state: ProgramState = ProgramState::new();
     let mut input_buffer: InputBuffer = InputBuffer::new();
-    program_state.running = true;
+    program_state.set_running(true);
 
-    while program_state.running {
+    while program_state.get_running() {
         print_prompt();
         read_input(&mut input_buffer);
 
@@ -114,7 +117,7 @@ fn read_input(input_buffer: &mut InputBuffer) {
 fn do_meta_command(command: &str, program_state: &mut ProgramState) -> MetaCommandResult{
     match command {
         ".exit" => {
-            program_state.running = false;
+            program_state.set_running(false);
         },
         ".test" => println!("Test worked!"),
         _ => return MetaCommandUnrecognized
@@ -135,7 +138,7 @@ fn do_prepared_statements(input: &str, statement: &mut PreparedStatement) -> Pre
         }
 
         statement.row.set_id(split_info.get(1).unwrap().parse::<u32>().unwrap_or(0));
-        if statement.row.id == 0 {
+        if statement.row.get_id() == 0 {
             return PreparedStatementSyntaxError
         }
 
@@ -227,148 +230,13 @@ fn usage(exec_path: String) -> String {
     format!("Usage: {exec_path} <database_file_name>")
 }
 
-/*
-struct Varchar {
-    size: u8,
-    value: Vec<char>
-}
-
-impl Varchar {
-    pub fn new(size: u8) -> Self {
-        Varchar {
-            size,
-            value: Vec::with_capacity(size as usize)
-        }
-    }
-
-    fn set_value(&mut self, new_value: String) -> bool { // TODO add getters/setters https://stackoverflow.com/a/44879870/3875151
-        if new_value.len() > self.size as usize {
-            return false;
-        }
-
-        let mut index = 0;
-        for chr in new_value.chars() {
-            if self.value.len() <= index {
-                self.value.push(chr);
-            } else {
-                self.value[index] = chr;
-            }
-
-            index += 1;
-        }
-
-        return true;
-    }
-
-    fn to_string(&self) -> String {
-        self.value.iter().collect()
-    }
-}
-*/
-
-struct SimpleRow {
-    id: u32,
-    username: [char; USERNAME_SIZE],
-    username_len: usize,
-    email: [char; EMAIL_SIZE],
-    email_len: usize
-}
-
-impl SimpleRow {
-    pub fn new() -> Self {
-        SimpleRow {
-            id: 0,
-            username: ['\0'; USERNAME_SIZE],
-            username_len: 0,
-            email: ['\0'; EMAIL_SIZE],
-            email_len: 0
-        }
-    }
-
-    fn get_username(&self) -> String {
-        // println!("{}", self.username_len);
-        // let s = String::from_iter(&self.username[0..self.username_len]);
-        // println!("{} {}", s, s.len());
-        return String::from_iter(&self.username[0..self.username_len]);
-    }
-
-    fn set_username(&mut self, new_username: String) -> bool {
-        if new_username.len() > self.username.len() {
-            return false;
-        }
-
-        let username_bytes = new_username.as_bytes();
-
-        for i in 0..self.username.len() {
-            if i < new_username.len() {
-                self.username[i] = username_bytes[i] as char;
-            } else {
-                self.username[i] = '\0';
-            }
-        }
-
-        self.username_len = new_username.len();
-        return true;
-    }
-
-    fn get_email(&self) -> String {
-        return String::from_iter(&self.email[0..self.email_len]);
-    }
-
-    fn set_email(&mut self, new_email: String) -> bool {
-        if new_email.len() > self.email.len() {
-            return false;
-        }
-
-        let email_bytes = new_email.as_bytes();
-
-        for i in 0..self.email.len() {
-            if i < new_email.len() {
-                self.email[i] = email_bytes[i] as char;
-            } else {
-                self.email[i] = '\0';
-            }
-        }
-
-        self.email_len = new_email.len();
-        return true;
-    }
-
-    fn get_id(&self) -> u32 {
-        return self.id;
-    }
-
-    fn set_id(&mut self, new_id: u32) -> bool {
-        self.id = new_id;
-        return true;
-    }
-}
-
-enum StatementType {
-    Invalid,
-    Insert,
-    Select
-}
-
-struct ProgramState {
-    running: bool
-}
-
-impl ProgramState {
-    pub fn new() -> Self {
-        ProgramState {
-            running: false,
-        }
-    }
-}
-
 struct PreparedStatement {
     statement_type: StatementType,
     row: SimpleRow,
 }
 
 impl PreparedStatement {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let row = SimpleRow::new();
 
         PreparedStatement {
@@ -378,169 +246,14 @@ impl PreparedStatement {
     }
 }
 
-
-
-struct Table {
-    num_rows: usize,
-    rows: Vec<SimpleRow>,
-    file_ok: bool,
-    file: File
-}
-
-impl Table {
-    pub fn new(db_file_name: &String) -> Table {
-        let file_existed = Path::new(db_file_name).exists();
-        let db_file = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(db_file_name);
-
-
-        if ! file_existed {
-            let res = db_file.as_ref().unwrap().set_len((PAGE_SIZE * TABLE_MAX_PAGES * ROW_SIZE / ROWS_PER_PAGE) as u64);
-            if ! res.is_ok() {
-                println!("Tried to create file {db_file_name}, could not!");
-            }
-        }
-
-        if ! db_file.is_ok() {
-            return Table {
-                num_rows: 0,
-                rows: Vec::with_capacity(0),
-                file_ok: false,
-                file: db_file.unwrap(),
-            }
-        }
-
-        let mut new_table = Table {
-            num_rows: 0,
-            rows: Vec::with_capacity(TABLE_MAX_PAGES * PAGE_SIZE),
-            file_ok: true,
-            file: db_file.unwrap()
-        };
-        new_table.read_rows_from_file().expect("TODO: panic message");
-
-        return new_table;
-    }
-
-    fn write_at_position(&self, buf: &Vec<u8>, position: u64) -> bool{
-        let write = self.file.write_all_at(&buf, position);
-        if ! write.is_ok() {
-            println!("Problem writing to database file at position {}.", position);
-            return false;
-        }
-
-        return true;
-    }
-
-    fn write_rows_to_file(&mut self) {
-        if self.rows.len() == 0 {
-            return;
-        }
-        // println!("Writing!");
-
-        if !self.file_ok {
-            println!("There was a problem when initially opening the database file, will not attempt to write to it!");
-            return;
-        }
-
-        let mut rows_written = 0;
-
-        for row in &self.rows {
-            // We now write at the offset 10.
-            // file.write_all_at(b"sushi", 10)?;
-            let mut row_buf: Vec<u8> = vec![];
-            row_buf.extend_from_slice(&row.id.to_le_bytes());
-            self.write_at_position(&row_buf, (rows_written * ROW_SIZE + ID_OFFSET) as u64);
-
-            row_buf = vec![];
-            write!(row_buf, "{}", &row.get_username()).expect("Could not write to Vec buffer. Out of memory?");
-            self.write_at_position(&row_buf, (rows_written * ROW_SIZE + USERNAME_OFFSET) as u64);
-
-            row_buf = vec![];
-            write!(row_buf, "{}", &row.get_email()).expect("Could not write to Vec buffer. Out of memory?");
-            self.write_at_position(&row_buf, (rows_written * ROW_SIZE + EMAIL_OFFSET) as u64);
-
-            rows_written += 1;
-        }
-    }
-
-    fn seek_read(&mut self, offset: u64, buf: &mut Vec<u8>) -> io::Result<()> {
-        self.file.seek(SeekFrom::Start(offset))?;
-        self.file.read_exact(buf)?;
-        Ok(())
-    }
-
-    fn read_rows_from_file(&mut self) -> io::Result<()> {
-        // println!("Reading!");
-
-        let mut row_count = 0;
-        loop {
-            let mut v = vec![0; ID_SIZE];
-            self.seek_read((row_count * ROW_SIZE + ID_OFFSET) as u64, &mut v)?;
-            let id = u32::from_le_bytes(v.clone().try_into().expect("handle the error however you want"));
-            if id == 0 {
-                break;
-            }
-
-            v = vec![0; USERNAME_SIZE];
-            self.seek_read((row_count * ROW_SIZE + USERNAME_OFFSET) as u64, &mut v)?;
-            let username = String::from_utf8(v.clone()).unwrap_or("".to_string());
-
-            v = vec![0; EMAIL_SIZE];
-            self.seek_read((row_count * ROW_SIZE + EMAIL_OFFSET) as u64, &mut v)?;
-            let email = String::from_utf8(v.clone()).unwrap_or("".to_string());
-
-            let mut row = SimpleRow::new();
-
-            row.set_id(id);
-
-            row.set_username(username);
-            row.set_email(email);
-
-
-
-            // TODO move into one function
-            self.rows.push(row);
-            self.num_rows += 1;
-
-            row_count += 1;
-        }
-        Ok(())
-    }
-
-    fn drop(&mut self) {
-        self.write_rows_to_file();
-    }
-}
-
 struct InputBuffer {
     buffer: String
 }
 
 impl InputBuffer {
-    pub fn new() -> Self {
+    fn new() -> Self {
         InputBuffer {
             buffer: "".to_string(),
         }
     }
-}
-
-enum MetaCommandResult {
-    MetaCommandSuccess,
-    MetaCommandUnrecognized
-}
-
-enum PreparedStatementResult {
-    PreparedStatementSuccess,
-    PreparedStatementSyntaxError,
-    PreparedStatementUnrecognized,
-    PreparedStatementError
-}
-
-enum ExecuteResult {
-    ExecuteSuccess,
-    ExecuteFailed,
-    ExecuteTableFull
 }
