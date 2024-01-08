@@ -1,9 +1,9 @@
 use std::{env, io};
-use std::io::{Write};
+use std::io::Write;
 use std::process::exit;
 
-use crate::b_tree::{SimpleRow, Table};
-use crate::state::{ProgramState};
+use crate::b_tree::{Cursor, SimpleRow, Table};
+use crate::state::ProgramState;
 use crate::status::{ExecuteResult, MetaCommandResult, PreparedStatementResult, StatementType};
 use crate::status::ExecuteResult::{ExecuteFailed, ExecuteSuccess, ExecuteTableFull};
 use crate::status::MetaCommandResult::{MetaCommandSuccess, MetaCommandUnrecognized};
@@ -169,8 +169,10 @@ fn execute_prepared_statement(statement: PreparedStatement, table: &mut Table) -
 
     exec_result
 }
-
-fn set_row_slot(table: &mut Table, row: SimpleRow, _row_num: usize) -> bool { // TODO make member function
+// serialize_row*** ignore below comments
+// row_slot -> cursor_value
+// https://cstack.github.io/db_tutorial/parts/part6.html
+fn set_row_slot(table: &mut Table, row: SimpleRow) -> bool { // TODO make member function
     // let page_num: usize = row_num / ROWS_PER_PAGE;
     // let row_slot = row_num % ROWS_PER_PAGE;
 
@@ -193,7 +195,7 @@ fn set_row_slot(table: &mut Table, row: SimpleRow, _row_num: usize) -> bool { //
 }
 
 fn _append_row_slot(table: &mut Table, row: SimpleRow) -> bool { // TODO make member function
-    return set_row_slot(table, row, &table.num_rows + 1);
+    return set_row_slot(table, row);
 }
 
 fn execute_insert(statement: PreparedStatement, table: &mut Table) -> ExecuteResult {
@@ -202,7 +204,9 @@ fn execute_insert(statement: PreparedStatement, table: &mut Table) -> ExecuteRes
     }
 
     let to_insert: SimpleRow = statement.row;
-    if set_row_slot(table, to_insert, table.num_rows) {
+    let _cursor = Cursor::table_end(table); // -- use in set_row_slot for some reason??
+
+    if set_row_slot(table, to_insert) {
         return ExecuteSuccess
     }
 
@@ -210,8 +214,10 @@ fn execute_insert(statement: PreparedStatement, table: &mut Table) -> ExecuteRes
 }
 
 fn execute_select(_statement: PreparedStatement, table: &mut Table) -> ExecuteResult {
-    for i in &table.rows {
+    let mut cursor = Cursor::table_start(table);
+    for i in &cursor.table.rows {
         print_row(i);
+        cursor.advance();
     }
 
     ExecuteSuccess

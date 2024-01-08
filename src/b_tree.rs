@@ -3,8 +3,8 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::fs::FileExt;
 use std::path::Path;
-use crate::{EMAIL_OFFSET, EMAIL_SIZE, ID_OFFSET, ID_SIZE, PAGE_SIZE, ROW_SIZE, ROWS_PER_PAGE, TABLE_MAX_PAGES, USERNAME_OFFSET, USERNAME_SIZE};
 
+use crate::{EMAIL_OFFSET, EMAIL_SIZE, ID_OFFSET, ID_SIZE, PAGE_SIZE, ROW_SIZE, ROWS_PER_PAGE, TABLE_MAX_PAGES, USERNAME_OFFSET, USERNAME_SIZE};
 
 pub(crate) struct Table {
     pub(crate) num_rows: usize,
@@ -64,7 +64,6 @@ impl Table {
         if self.rows.len() == 0 {
             return;
         }
-        // println!("Writing!");
 
         if !self.file_ok {
             println!("There was a problem when initially opening the database file, will not attempt to write to it!");
@@ -126,7 +125,6 @@ impl Table {
             row.set_email(email);
 
 
-
             // TODO move into one function
             self.rows.push(row);
             self.num_rows += 1;
@@ -139,8 +137,6 @@ impl Table {
     pub(crate) fn drop(&mut self) {
         self.write_rows_to_file();
     }
-
-
 }
 
 pub(crate) struct SimpleRow {
@@ -218,5 +214,41 @@ impl SimpleRow {
     pub(crate) fn set_id(&mut self, new_id: u32) -> bool {
         self.id = new_id;
         return true;
+    }
+}
+
+pub(crate) struct Cursor<'a> {
+    pub(crate) table: &'a Table,
+    pub(crate) row_num: usize,
+    pub(crate) end_of_table: bool // Indicates a position one past the last element
+}
+
+impl Cursor<'_> {
+
+    pub(crate) fn table_start(table: &mut Table) -> Cursor {
+        let end_of: bool = table.num_rows == 0;
+
+        Cursor {
+            table,
+            row_num: 0,
+            end_of_table: end_of,
+        }
+    }
+
+    pub(crate) fn table_end(table: &mut Table) -> Cursor {
+        let num_rows = table.num_rows;
+        Cursor {
+            table,
+            row_num: num_rows,
+            end_of_table: true
+        }
+    }
+
+    pub(crate) fn advance(&mut self) {
+        self.row_num += 1;
+
+        if self.row_num >= self.table.num_rows {
+            self.end_of_table = true;
+        }
     }
 }
